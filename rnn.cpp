@@ -30,7 +30,13 @@ int main()
 
     ifs.close();
 
+    std::vector<std::pair<std::string, unsigned int>> dicVec(dictionary.begin(), dictionary.end());
+    std::sort(dicVec.begin(), dicVec.end(), [](std::pair<std::string, unsigned int> first, std::pair<std::string, unsigned int> second) { return first.second > second.second; });
 
+    for(std::vector<std::pair<std::string, unsigned int>>::iterator it = dicVec.begin(); it != dicVec.end(); it++)
+    {
+        std::cout << (*it).first << ": " << (*it).second << std::endl;
+    }
 
     return 0;
 }
