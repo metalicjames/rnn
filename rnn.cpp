@@ -1,6 +1,39 @@
 #include <cmath>
+#include <iostream>
+#include <map>
 
 #include "rnn.h"
+
+int main()
+{
+    std::ifstream ifs("tokens.txt");
+
+    std::string word;
+
+    std::map<std::string, unsigned int> dictionary;
+    std::map<std::string, unsigned int>::iterator it;
+
+    while(std::getline(ifs, word, ' '))
+    {
+        word.erase(std::remove(word.begin(), word.end(), '\n'), word.end());
+        std::transform(word.begin(), word.end(), word.begin(), ::tolower);
+        it = dictionary.find(word);
+        if(it != dictionary.end())
+        {
+            it->second++;
+        }
+        else
+        {
+            dictionary.insert(std::pair<std::string, unsigned int> (word, 1));
+        }
+    }
+
+    ifs.close();
+
+
+
+    return 0;
+}
 
 RNN::RNN(unsigned int nword_dim, unsigned int nhidden_dim, unsigned int nbptt_truncate)
 {
@@ -46,4 +79,10 @@ std::vector<arma::mat> RNN::forward_propagation(arma::vec x)
     returning.push_back(s);
 
     return returning;
+}
+
+arma::rowvec RNN::predict(arma::vec x)
+{
+    arma::mat returning = forward_propagation(x)[0];
+    return arma::max(returning, 0);
 }

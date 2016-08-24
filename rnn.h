@@ -9,6 +9,7 @@ class RNN
 {
     public:
         RNN(unsigned int nword_dim, unsigned int nhidden_dim = 100, unsigned int nbptt_truncate = 4);
+        arma::rowvec predict(arma::vec x);
 
     private:
         unsigned int word_dim;
