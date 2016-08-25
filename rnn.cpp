@@ -10,6 +10,23 @@ int main()
 {
     RNN rnn(1000);
 
+    arma::vec input(rnn.trainingData[0].x.size());
+
+    for(unsigned int i = 0; i < rnn.trainingData[0].x.size(); i++)
+    {
+        input(i) = rnn.trainingData[0].x[i];
+    }
+
+    input.print();
+
+    arma::urowvec predictions = rnn.predict(input);
+    predictions.print();
+
+    for(unsigned int i = 0; i < predictions.n_elem; i++)
+    {
+        std::cout << rnn.tokenFromId(predictions(i)) << " ";
+    }
+
     return 0;
 }
 
@@ -141,14 +158,14 @@ RNN::RNN(unsigned int nword_dim, unsigned int nhidden_dim, unsigned int nbptt_tr
 
 std::vector<arma::mat> RNN::forward_propagation(arma::vec x)
 {
-    unsigned int T = x.n_cols;
+    unsigned int T = x.n_rows;
 
-    arma::mat s(T + 2, hidden_dim, arma::fill::zeros);
-    arma::mat o(T, word_dim, arma::fill::zeros);
+    arma::mat s(hidden_dim, T + 2, arma::fill::zeros);
+    arma::mat o(word_dim, T, arma::fill::zeros);
 
     for(unsigned int t = 0; t < T; t++)
     {
-        arma::mat result = U(x(t)) + (W * s(t));
+        arma::mat result = U.col(x(t)) + (W * s.col(t));
         result.transform( [](double val)
         {
             return std::tanh(val);
@@ -156,7 +173,7 @@ std::vector<arma::mat> RNN::forward_propagation(arma::vec x)
         s.col(t + 1) = result;
 
         //Calculate softmax
-        result = V * s(t + 1);
+        result = V * s.col(t + 1);
         arma::mat temp = result;
         temp.transform( [](double val)
         {
@@ -178,8 +195,8 @@ std::vector<arma::mat> RNN::forward_propagation(arma::vec x)
     return returning;
 }
 
-arma::rowvec RNN::predict(arma::vec x)
+arma::urowvec RNN::predict(arma::vec x)
 {
     arma::mat returning = forward_propagation(x)[0];
-    return arma::max(returning, 0);
+    return arma::index_max(returning, 0);
 }
