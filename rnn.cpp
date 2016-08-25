@@ -8,24 +8,27 @@
 
 int main()
 {
+    arma::arma_rng::set_seed(10);
     RNN rnn(1000);
 
-    arma::vec input(rnn.trainingData[0].x.size());
+    std::vector<arma::vec> x;
+    std::vector<arma::vec> y;
 
-    for(unsigned int i = 0; i < rnn.trainingData[0].x.size(); i++)
+    for(std::vector<RNN::trainingStruct>::iterator it = rnn.trainingData.begin(); it != rnn.trainingData.end(); it++)
     {
-        input(i) = rnn.trainingData[0].x[i];
+        arma::vec input((*it).x.size());
+        arma::vec output((*it).y.size());
+        for(unsigned int i = 0; i < (*it).x.size(); i++)
+        {
+            input(i) = (*it).x[i];
+            output(i) = (*it).y[i];
+        }
+        x.push_back(input);
+        y.push_back(output);
     }
 
-    input.print();
-
-    arma::urowvec predictions = rnn.predict(input);
-    predictions.print();
-
-    for(unsigned int i = 0; i < predictions.n_elem; i++)
-    {
-        std::cout << rnn.tokenFromId(predictions(i)) << " ";
-    }
+    std::cout << "Expected loss: " << std::log(1000) << std::endl;
+    std::cout << "Actual loss: " << rnn.calculateLoss(x, y);
 
     return 0;
 }
@@ -144,14 +147,11 @@ RNN::RNN(unsigned int nword_dim, unsigned int nhidden_dim, unsigned int nbptt_tr
     hidden_dim = nhidden_dim;
     bptt_truncate = nbptt_truncate;
 
-    U.set_size(hidden_dim, word_dim);
-    U.randn();
+    U.randn(hidden_dim, word_dim);
 
-    V.set_size(word_dim, hidden_dim);
-    V.randn();
+    V.randn(word_dim, hidden_dim);
 
-    W.set_size(hidden_dim, hidden_dim);
-    W.randn();
+    W.randn(hidden_dim, hidden_dim);
 
     loadVocabulary();
 }
@@ -199,4 +199,29 @@ arma::urowvec RNN::predict(arma::vec x)
 {
     arma::mat returning = forward_propagation(x)[0];
     return arma::index_max(returning, 0);
+}
+
+double RNN::calculateLoss(std::vector<arma::vec> x, std::vector<arma::vec> y)
+{
+    double L = 0;
+    double N = 0;
+
+    for(unsigned int i = 0; i < y.size(); i++)
+    {
+        N += y[i].n_rows;
+
+        arma::mat o = forward_propagation(x[i])[0];
+
+        o.transform( [](double val)
+        {
+            return std::log(val);
+        });
+
+        for(unsigned int i2 = 0; i2 < y[i].n_rows; i2++)
+        {
+            L += -1 * o(y[i](i2), i2);
+        }
+    }
+
+    return L / N;
 }

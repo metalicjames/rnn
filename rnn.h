@@ -19,6 +19,7 @@ class RNN
         std::vector<arma::mat> forward_propagation(arma::vec x);
         std::string tokenFromId(unsigned int id);
         unsigned int idFromToken(std::string token);
+        double calculateLoss(std::vector<arma::vec> x, std::vector<arma::vec> y);
 
     private:
         unsigned int word_dim;
