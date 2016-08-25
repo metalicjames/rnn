@@ -19,6 +19,16 @@ class RNN
         arma::mat V;
         arma::mat W;
         std::vector<arma::mat> forward_propagation(arma::vec x);
+        std::map<std::string, unsigned int> vocabulary;
+        void loadVocabulary();
+        std::string tokenFromId(unsigned int id);
+        unsigned int idFromToken(std::string token);
+        struct trainingStruct
+        {
+            std::vector<unsigned int> x;
+            std::vector<unsigned int> y;
+        };
+        std::vector<trainingStruct> trainingData;
 };
 
 #endif // RNN_H_INCLUDED
