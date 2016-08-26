@@ -3,12 +3,12 @@
 #include <map>
 #include <sstream>
 #include <iterator>
+#include <random>
 
 #include "rnn.h"
 
 int main()
 {
-    arma::arma_rng::set_seed(10);
     RNN rnn(1000);
 
     std::vector<arma::vec> x;
@@ -147,11 +147,27 @@ RNN::RNN(unsigned int nword_dim, unsigned int nhidden_dim, unsigned int nbptt_tr
     hidden_dim = nhidden_dim;
     bptt_truncate = nbptt_truncate;
 
-    U.randn(hidden_dim, word_dim);
+    std::default_random_engine generator;
+    std::uniform_real_distribution<double> Udist(-1/std::sqrt(word_dim), 1/std::sqrt(word_dim));
+    std::uniform_real_distribution<double> Vdist(-1/std::sqrt(hidden_dim), 1/std::sqrt(hidden_dim));
 
-    V.randn(word_dim, hidden_dim);
+    U.set_size(hidden_dim, word_dim);
+    U.imbue( [&]()
+    {
+        return Udist(generator);
+    });
 
-    W.randn(hidden_dim, hidden_dim);
+    V.set_size(word_dim, hidden_dim);
+    V.imbue( [&]()
+    {
+        return Vdist(generator);
+    });
+
+    W.set_size(hidden_dim, hidden_dim);
+    W.imbue( [&]()
+    {
+        return Vdist(generator);
+    });
 
     loadVocabulary();
 }
@@ -174,16 +190,15 @@ std::vector<arma::mat> RNN::forward_propagation(arma::vec x)
 
         //Calculate softmax
         result = V * s.col(t + 1);
-        arma::mat temp = result;
-        temp.transform( [](double val)
+        result.transform( [](double val)
         {
             return std::exp(val);
         });
-        double sum = arma::accu(temp);
+        double sum = arma::accu(result);
 
         result.transform( [&](double val)
         {
-            return std::exp(val) / sum;
+            return val / sum;
         });
         o.col(t) = result;
     }
