@@ -30,10 +30,12 @@ int main()
     //std::cout << "Expected loss: " << std::log(1000) << std::endl;
     //std::cout << "Actual loss: " << rnn.calculateLoss(x, y);
 
-    std::vector<arma::mat> output = rnn.bptt(x[0], y[0]);
+    /*std::vector<arma::mat> output = rnn.bptt(x[0], y[0]);
     output[0].print();
     output[1].print();
-    output[2].print();
+    output[2].print();*/
+
+    rnn.gradient_check(x[0], y[0]);
 
     return 0;
 }
@@ -275,4 +277,44 @@ std::vector<arma::mat> RNN::bptt(arma::vec x, arma::vec y)
     returning.push_back(dLdW);
 
     return returning;
+}
+
+void RNN::gradient_check(arma::vec x, arma::vec y, double h, double error_threshold)
+{
+    std::vector<arma::mat> bptt_gradients = bptt(x, y);
+
+    std::vector<arma::mat*> matrices;
+    matrices.push_back(&U);
+    matrices.push_back(&V);
+    matrices.push_back(&W);
+
+    for(std::vector<arma::mat*>::iterator it = matrices.begin(); it != matrices.end(); it++)
+    {
+        for(arma::mat::iterator elem = (*it)->begin(); elem != (*it)->end(); elem++)
+        {
+            double original_value = (*elem);
+
+            (*elem) = original_value + h;
+            double gradplus = calculateLoss(std::vector<arma::vec>(1, x), std::vector<arma::vec>(1, y));
+
+            (*elem) = original_value - h;
+            double gradminus = calculateLoss(std::vector<arma::vec>(1, x), std::vector<arma::vec>(1, y));
+
+            double estimated_gradient = (gradplus - gradminus) / (2 * h);
+
+            (*elem) = original_value;
+
+            double backprop_gradient = bptt_gradients[std::distance(matrices.begin(), it)](std::distance((*it)->begin(), elem));
+
+            double relative_error = std::abs(backprop_gradient - estimated_gradient) / (std::abs(backprop_gradient) + std::abs(estimated_gradient));
+
+            if(relative_error > error_threshold)
+            {
+                std::cout << "Gradient Check ERROR" << std::endl;
+                return;
+            }
+        }
+    }
+
+    std::cout << "Gradient check passed" << std::endl;
 }

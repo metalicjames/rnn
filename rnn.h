@@ -21,6 +21,7 @@ class RNN
         unsigned int idFromToken(std::string token);
         double calculateLoss(std::vector<arma::vec> x, std::vector<arma::vec> y);
         std::vector<arma::mat> bptt(arma::vec x, arma::vec y);
+        void gradient_check(arma::vec x, arma::vec y, double h = 0.001, double error_threshold = 0.01);
 
     private:
         unsigned int word_dim;
