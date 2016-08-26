@@ -20,6 +20,7 @@ class RNN
         std::string tokenFromId(unsigned int id);
         unsigned int idFromToken(std::string token);
         double calculateLoss(std::vector<arma::vec> x, std::vector<arma::vec> y);
+        std::vector<arma::mat> bptt(arma::vec x, arma::vec y);
 
     private:
         unsigned int word_dim;

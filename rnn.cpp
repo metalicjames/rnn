@@ -27,8 +27,13 @@ int main()
         y.push_back(output);
     }
 
-    std::cout << "Expected loss: " << std::log(1000) << std::endl;
-    std::cout << "Actual loss: " << rnn.calculateLoss(x, y);
+    //std::cout << "Expected loss: " << std::log(1000) << std::endl;
+    //std::cout << "Actual loss: " << rnn.calculateLoss(x, y);
+
+    std::vector<arma::mat> output = rnn.bptt(x[0], y[0]);
+    output[0].print();
+    output[1].print();
+    output[2].print();
 
     return 0;
 }
@@ -189,11 +194,7 @@ std::vector<arma::mat> RNN::forward_propagation(arma::vec x)
         s.col(t + 1) = result;
 
         //Calculate softmax
-        result = V * s.col(t + 1);
-        result.transform( [](double val)
-        {
-            return std::exp(val);
-        });
+        result = arma::exp(V * s.col(t + 1));
         double sum = arma::accu(result);
 
         result.transform( [&](double val)
@@ -225,12 +226,7 @@ double RNN::calculateLoss(std::vector<arma::vec> x, std::vector<arma::vec> y)
     {
         N += y[i].n_rows;
 
-        arma::mat o = forward_propagation(x[i])[0];
-
-        o.transform( [](double val)
-        {
-            return std::log(val);
-        });
+        arma::mat o = arma::log(forward_propagation(x[i])[0]);
 
         for(unsigned int i2 = 0; i2 < y[i].n_rows; i2++)
         {
@@ -239,4 +235,44 @@ double RNN::calculateLoss(std::vector<arma::vec> x, std::vector<arma::vec> y)
     }
 
     return L / N;
+}
+
+std::vector<arma::mat> RNN::bptt(arma::vec x, arma::vec y)
+{
+    unsigned int T = y.n_rows;
+
+    std::vector<arma::mat> output = forward_propagation(x);
+    arma::mat o = output[0];
+    arma::mat s = output[1];
+
+    arma::mat dLdU(arma::size(U), arma::fill::zeros);
+    arma::mat dLdV(arma::size(V), arma::fill::zeros);
+    arma::mat dLdW(arma::size(W), arma::fill::zeros);
+
+    arma::mat delta_o = o;
+    for(unsigned int i = 0; i < y.n_rows; i++)
+    {
+        delta_o(y(i), i) -= 1;
+    }
+
+    for(int t = T - 1; t >= 0; t--)
+    {
+        dLdV += delta_o.col(t) * s.col(t + 1).t();
+        arma::vec delta_t = (V.t() * delta_o.col(t)) % (1 - arma::square(s.col(t + 1)));
+        int truncate = t - bptt_truncate;
+        for(int bptt_step = t; bptt_step >= std::max(0, truncate); bptt_step--)
+        {
+            dLdW += delta_t * s.col(bptt_step).t();
+            dLdU.col(x(bptt_step)) += delta_t;
+
+            delta_t = (W.t() * delta_t) % (1 - arma::square(s.col(bptt_step)));
+        }
+    }
+
+    std::vector<arma::mat> returning;
+    returning.push_back(dLdU);
+    returning.push_back(dLdV);
+    returning.push_back(dLdW);
+
+    return returning;
 }
