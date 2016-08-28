@@ -30,9 +30,15 @@ class RNN
         unsigned int word_dim;
         unsigned int hidden_dim;
         unsigned int bptt_truncate;
-        arma::mat U;
+        arma::mat Ui;
+        arma::mat Uf;
+        arma::mat Uo;
+        arma::mat Ug;
         arma::mat V;
-        arma::mat W;
+        arma::mat Wi;
+        arma::mat Wf;
+        arma::mat Wo;
+        arma::mat Wg;
         std::map<std::string, unsigned int> vocabulary;
         void loadVocabulary();
         void sgd_step(arma::vec x, arma::vec y, double learning_rate);

@@ -37,7 +37,7 @@ int main()
 
     //rnn.gradient_check(x[0], y[0]);
 
-    //rnn.train_with_sgd(x, y);
+    rnn.train_with_sgd(x, y, 0.1, 10, 5);
 
     const unsigned int no_sentences = 10;
     const unsigned int min_words = 7;
@@ -179,7 +179,7 @@ RNN::RNN(unsigned int nword_dim, unsigned int nhidden_dim, unsigned int nbptt_tr
     std::uniform_real_distribution<double> Udist(-1/std::sqrt(word_dim), 1/std::sqrt(word_dim));
     std::uniform_real_distribution<double> Vdist(-1/std::sqrt(hidden_dim), 1/std::sqrt(hidden_dim));
 
-    bool status = U.load("layers/U.dat");
+    /*bool status = U.load("layers/U.dat");
 
     if(status)
     {
@@ -187,9 +187,27 @@ RNN::RNN(unsigned int nword_dim, unsigned int nhidden_dim, unsigned int nbptt_tr
         W.load("layers/W.dat");
     }
     else
-    {
-        U.set_size(hidden_dim, word_dim);
-        U.imbue( [&]()
+    {*/
+        Ui.set_size(hidden_dim, word_dim);
+        Ui.imbue( [&]()
+        {
+            return Udist(generator);
+        });
+
+        Uo.set_size(hidden_dim, word_dim);
+        Uo.imbue( [&]()
+        {
+            return Udist(generator);
+        });
+
+        Uf.set_size(hidden_dim, word_dim);
+        Uf.imbue( [&]()
+        {
+            return Udist(generator);
+        });
+
+        Ug.set_size(hidden_dim, word_dim);
+        Ug.imbue( [&]()
         {
             return Udist(generator);
         });
@@ -200,20 +218,44 @@ RNN::RNN(unsigned int nword_dim, unsigned int nhidden_dim, unsigned int nbptt_tr
             return Vdist(generator);
         });
 
-        W.set_size(hidden_dim, hidden_dim);
-        W.imbue( [&]()
+        Wi.set_size(hidden_dim, hidden_dim);
+        Wi.imbue( [&]()
         {
             return Vdist(generator);
         });
-    }
+
+        Wf.set_size(hidden_dim, hidden_dim);
+        Wf.imbue( [&]()
+        {
+            return Vdist(generator);
+        });
+
+        Wo.set_size(hidden_dim, hidden_dim);
+        Wo.imbue( [&]()
+        {
+            return Vdist(generator);
+        });
+
+        Wg.set_size(hidden_dim, hidden_dim);
+        Wg.imbue( [&]()
+        {
+            return Vdist(generator);
+        });
+    //}
 
     loadVocabulary();
 }
 
 RNN::~RNN()
 {
-    W.save("layers/W.dat");
-    U.save("layers/U.dat");
+    Wi.save("layers/Wi.dat");
+    Wo.save("layers/Wo.dat");
+    Wg.save("layers/Wg.dat");
+    Wf.save("layers/Wf.dat");
+    Ui.save("layers/Ui.dat");
+    Uo.save("layers/Uo.dat");
+    Ug.save("layers/Ug.dat");
+    Uf.save("layers/Uf.dat");
     V.save("layers/V.dat");
 }
 
@@ -222,19 +264,47 @@ std::vector<arma::mat> RNN::forward_propagation(arma::vec x)
     unsigned int T = x.n_rows;
 
     arma::mat s(hidden_dim, T + 2, arma::fill::zeros);
+    arma::mat c(hidden_dim, T + 2, arma::fill::zeros);
     arma::mat o(word_dim, T, arma::fill::zeros);
 
     for(unsigned int t = 0; t < T; t++)
     {
-        arma::mat result = U.col(x(t)) + (W * s.col(t));
-        result.transform( [](double val)
+        arma::vec inputGate = Ui.col(x(t)) + (Wi * s.col(t));
+        inputGate.transform( [](double val)
+        {
+            return val / (1 + std::abs(val));
+        });
+
+        arma::vec forgetGate = Uf.col(x(t)) + (Wf * s.col(t));
+        forgetGate.transform( [](double val)
+        {
+            return val / (1 + std::abs(val));
+        });
+
+        arma::vec outputGate = Uo.col(x(t)) + (Wo * s.col(t));
+        outputGate.transform( [](double val)
+        {
+            return val / (1 + std::abs(val));
+        });
+
+        arma::vec g = Ug.col(x(t)) + (Wg * s.col(t));
+        g.transform( [](double val)
         {
             return std::tanh(val);
         });
-        s.col(t + 1) = result;
+
+        c.col(t + 1) = (c.col(t) % forgetGate) + (g % inputGate);
+
+        arma::vec ctanh = c.col(t + 1);
+        ctanh.transform( [](double val)
+        {
+            return std::tanh(val);
+        });
+
+        s.col(t + 1) = ctanh % outputGate;
 
         //Calculate softmax
-        result = arma::exp(V * s.col(t + 1));
+        arma::vec result = arma::exp(V * s.col(t + 1));
         double sum = arma::accu(result);
 
         result.transform( [&](double val)
@@ -285,9 +355,15 @@ std::vector<arma::mat> RNN::bptt(arma::vec x, arma::vec y)
     arma::mat o = output[0];
     arma::mat s = output[1];
 
-    arma::mat dLdU(arma::size(U), arma::fill::zeros);
+    arma::mat dLdUi(arma::size(Ui), arma::fill::zeros);
+    arma::mat dLdUo(arma::size(Uo), arma::fill::zeros);
+    arma::mat dLdUf(arma::size(Uf), arma::fill::zeros);
+    arma::mat dLdUg(arma::size(Ug), arma::fill::zeros);
     arma::mat dLdV(arma::size(V), arma::fill::zeros);
-    arma::mat dLdW(arma::size(W), arma::fill::zeros);
+    arma::mat dLdWi(arma::size(Wi), arma::fill::zeros);
+    arma::mat dLdWo(arma::size(Wo), arma::fill::zeros);
+    arma::mat dLdWf(arma::size(Wf), arma::fill::zeros);
+    arma::mat dLdWg(arma::size(Wg), arma::fill::zeros);
 
     arma::mat delta_o = o;
     for(unsigned int i = 0; i < y.n_rows; i++)
@@ -302,17 +378,50 @@ std::vector<arma::mat> RNN::bptt(arma::vec x, arma::vec y)
         int truncate = t - bptt_truncate;
         for(int bptt_step = t; bptt_step >= std::max(0, truncate); bptt_step--)
         {
-            dLdW += delta_t * s.col(bptt_step).t();
-            dLdU.col(x(bptt_step)) += delta_t;
+            dLdWi += delta_t * s.col(bptt_step).t();
+            dLdUi.col(x(bptt_step)) += delta_t;
 
-            delta_t = (W.t() * delta_t) % (1 - arma::square(s.col(bptt_step)));
+            delta_t = (Wi.t() * delta_t) % (1 - arma::square(s.col(bptt_step)));
+        }
+
+        delta_t = (V.t() * delta_o.col(t)) % (1 - arma::square(s.col(t + 1)));
+        for(int bptt_step = t; bptt_step >= std::max(0, truncate); bptt_step--)
+        {
+            dLdWf += delta_t * s.col(bptt_step).t();
+            dLdUf.col(x(bptt_step)) += delta_t;
+
+            delta_t = (Wf.t() * delta_t) % (1 - arma::square(s.col(bptt_step)));
+        }
+
+        delta_t = (V.t() * delta_o.col(t)) % (1 - arma::square(s.col(t + 1)));
+        for(int bptt_step = t; bptt_step >= std::max(0, truncate); bptt_step--)
+        {
+            dLdWg += delta_t * s.col(bptt_step).t();
+            dLdUg.col(x(bptt_step)) += delta_t;
+
+            delta_t = (Wg.t() * delta_t) % (1 - arma::square(s.col(bptt_step)));
+        }
+
+        delta_t = (V.t() * delta_o.col(t)) % (1 - arma::square(s.col(t + 1)));
+        for(int bptt_step = t; bptt_step >= std::max(0, truncate); bptt_step--)
+        {
+            dLdWo += delta_t * s.col(bptt_step).t();
+            dLdUo.col(x(bptt_step)) += delta_t;
+
+            delta_t = (Wo.t() * delta_t) % (1 - arma::square(s.col(bptt_step)));
         }
     }
 
     std::vector<arma::mat> returning;
-    returning.push_back(dLdU);
+    returning.push_back(dLdUi);
+    returning.push_back(dLdUo);
+    returning.push_back(dLdUg);
+    returning.push_back(dLdUf);
     returning.push_back(dLdV);
-    returning.push_back(dLdW);
+    returning.push_back(dLdWi);
+    returning.push_back(dLdWo);
+    returning.push_back(dLdWg);
+    returning.push_back(dLdWf);
 
     return returning;
 }
@@ -322,9 +431,15 @@ void RNN::gradient_check(arma::vec x, arma::vec y, double h, double error_thresh
     std::vector<arma::mat> bptt_gradients = bptt(x, y);
 
     std::vector<arma::mat*> matrices;
-    matrices.push_back(&U);
+    matrices.push_back(&Ui);
+    matrices.push_back(&Uo);
+    matrices.push_back(&Ug);
+    matrices.push_back(&Uf);
     matrices.push_back(&V);
-    matrices.push_back(&W);
+    matrices.push_back(&Wi);
+    matrices.push_back(&Wo);
+    matrices.push_back(&Wg);
+    matrices.push_back(&Wf);
 
     for(std::vector<arma::mat*>::iterator it = matrices.begin(); it != matrices.end(); it++)
     {
@@ -361,15 +476,22 @@ void RNN::sgd_step(arma::vec x, arma::vec y, double learning_rate)
 {
     std::vector<arma::mat> bptt_result = bptt(x, y);
 
-    U -= learning_rate * bptt_result[0];
-    V -= learning_rate * bptt_result[1];
-    W -= learning_rate * bptt_result[2];
+    Ui -= learning_rate * bptt_result[0];
+    Uo -= learning_rate * bptt_result[1];
+    Ug -= learning_rate * bptt_result[2];
+    Uf -= learning_rate * bptt_result[3];
+    V -= learning_rate * bptt_result[4];
+    Wi -= learning_rate * bptt_result[5];
+    Wo -= learning_rate * bptt_result[6];
+    Wg -= learning_rate * bptt_result[7];
+    Wf -= learning_rate * bptt_result[8];
 }
 
 void RNN::train_with_sgd(std::vector<arma::vec> x, std::vector<arma::vec> y, double learning_rate, unsigned int nepoch, unsigned int evaluate_loss_after)
 {
     std::vector<std::array<double, 2>> losses;
     unsigned int num_examples_seen = 0;
+    time_t last_time = std::time(0);
 
     for(unsigned int epoch = 0; epoch < nepoch; epoch++)
     {
@@ -383,7 +505,19 @@ void RNN::train_with_sgd(std::vector<arma::vec> x, std::vector<arma::vec> y, dou
             char buf[20];
             std::strftime(buf, 20, "%Y-%m-%d %H:%M:%S", ptm);
 
-            std::cout << buf << ": Loss after num_examples_seen = " << num_examples_seen << " epoch = " << epoch << ": " << loss << std::endl;
+            std::cout << buf << ": Loss after num_examples_seen = " << num_examples_seen << " epoch = " << epoch << ": " << loss;
+            if(epoch > 0)
+            {
+                time_t remain = ((tt - last_time) * (nepoch - epoch)) / evaluate_loss_after;
+                time_t hour = remain / 3600;
+                time_t minute = (remain % 3600) / 60;
+                time_t seconds = remain % 60;
+
+                std::cout << " est time remaining: " << hour << ":" << minute << ":" << seconds;
+
+                last_time = tt;
+            }
+            std::cout << std::endl;
             if(losses.size() > 1 && losses[losses.size() - 1][1] > losses[losses.size() - 2][1])
             {
                 learning_rate *= 0.5;
