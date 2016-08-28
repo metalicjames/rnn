@@ -37,7 +37,26 @@ int main()
 
     //rnn.gradient_check(x[0], y[0]);
 
-    rnn.train_with_sgd(x, y);
+    //rnn.train_with_sgd(x, y);
+
+    const unsigned int no_sentences = 10;
+    const unsigned int min_words = 7;
+
+    std::vector<unsigned int> new_sentence = rnn.generate_sentence();
+    for(unsigned int i = 0; i < no_sentences; i++)
+    {
+        while(new_sentence.size() < min_words + 2)
+        {
+            new_sentence = rnn.generate_sentence();
+        }
+
+        for(std::vector<unsigned int>::iterator it = new_sentence.begin(); it != new_sentence.end(); it++)
+        {
+            std::cout << rnn.tokenFromId(*it) << " ";
+        }
+        std::cout << std::endl;
+        new_sentence.clear();
+    }
 
     return 0;
 }
@@ -380,3 +399,29 @@ void RNN::train_with_sgd(std::vector<arma::vec> x, std::vector<arma::vec> y, dou
     }
 }
 
+std::vector<unsigned int> RNN::generate_sentence()
+{
+    std::default_random_engine generator(std::chrono::system_clock::now().time_since_epoch().count());
+
+    std::vector<unsigned int> new_sentence;
+    new_sentence.push_back(idFromToken("SENTENCE_START"));
+
+    while(new_sentence[new_sentence.size() - 1] != idFromToken("SENTENCE_END"))
+    {
+        arma::vec x(new_sentence.size());
+        for(unsigned int i = 0; i < new_sentence.size(); i++)
+        {
+            x(i) = new_sentence[i];
+        }
+        arma::mat next_word_probs = forward_propagation(x)[0];
+        std::discrete_distribution<unsigned int> words(next_word_probs.begin_col(next_word_probs.n_cols - 1), next_word_probs.end_col(next_word_probs.n_cols - 1));
+        unsigned int sampled_word = idFromToken("UNKNOWN_TOKEN");
+        while(sampled_word == idFromToken("UNKNOWN_TOKEN"))
+        {
+            sampled_word = words(generator);
+        }
+        new_sentence.push_back(sampled_word);
+    }
+
+    return new_sentence;
+}

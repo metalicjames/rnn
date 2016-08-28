@@ -24,6 +24,7 @@ class RNN
         std::vector<arma::mat> bptt(arma::vec x, arma::vec y);
         void gradient_check(arma::vec x, arma::vec y, double h = 0.001, double error_threshold = 0.01);
         void train_with_sgd(std::vector<arma::vec> x, std::vector<arma::vec> y, double learning_rate = 0.005, unsigned int nepoch = 100, unsigned int evaluate_loss_after = 5);
+        std::vector<unsigned int> generate_sentence();
 
     private:
         unsigned int word_dim;
