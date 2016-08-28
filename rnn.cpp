@@ -35,7 +35,9 @@ int main()
     output[1].print();
     output[2].print();*/
 
-    rnn.gradient_check(x[0], y[0]);
+    //rnn.gradient_check(x[0], y[0]);
+
+    rnn.train_with_sgd(x, y);
 
     return 0;
 }
@@ -158,25 +160,42 @@ RNN::RNN(unsigned int nword_dim, unsigned int nhidden_dim, unsigned int nbptt_tr
     std::uniform_real_distribution<double> Udist(-1/std::sqrt(word_dim), 1/std::sqrt(word_dim));
     std::uniform_real_distribution<double> Vdist(-1/std::sqrt(hidden_dim), 1/std::sqrt(hidden_dim));
 
-    U.set_size(hidden_dim, word_dim);
-    U.imbue( [&]()
-    {
-        return Udist(generator);
-    });
+    bool status = U.load("layers/U.dat");
 
-    V.set_size(word_dim, hidden_dim);
-    V.imbue( [&]()
+    if(status)
     {
-        return Vdist(generator);
-    });
+        V.load("layers/V.dat");
+        W.load("layers/W.dat");
+    }
+    else
+    {
+        U.set_size(hidden_dim, word_dim);
+        U.imbue( [&]()
+        {
+            return Udist(generator);
+        });
 
-    W.set_size(hidden_dim, hidden_dim);
-    W.imbue( [&]()
-    {
-        return Vdist(generator);
-    });
+        V.set_size(word_dim, hidden_dim);
+        V.imbue( [&]()
+        {
+            return Vdist(generator);
+        });
+
+        W.set_size(hidden_dim, hidden_dim);
+        W.imbue( [&]()
+        {
+            return Vdist(generator);
+        });
+    }
 
     loadVocabulary();
+}
+
+RNN::~RNN()
+{
+    W.save("layers/W.dat");
+    U.save("layers/U.dat");
+    V.save("layers/V.dat");
 }
 
 std::vector<arma::mat> RNN::forward_propagation(arma::vec x)
@@ -318,3 +337,46 @@ void RNN::gradient_check(arma::vec x, arma::vec y, double h, double error_thresh
 
     std::cout << "Gradient check passed" << std::endl;
 }
+
+void RNN::sgd_step(arma::vec x, arma::vec y, double learning_rate)
+{
+    std::vector<arma::mat> bptt_result = bptt(x, y);
+
+    U -= learning_rate * bptt_result[0];
+    V -= learning_rate * bptt_result[1];
+    W -= learning_rate * bptt_result[2];
+}
+
+void RNN::train_with_sgd(std::vector<arma::vec> x, std::vector<arma::vec> y, double learning_rate, unsigned int nepoch, unsigned int evaluate_loss_after)
+{
+    std::vector<std::array<double, 2>> losses;
+    unsigned int num_examples_seen = 0;
+
+    for(unsigned int epoch = 0; epoch < nepoch; epoch++)
+    {
+        if(epoch % evaluate_loss_after == 0)
+        {
+            double loss = calculateLoss(x, y);
+            losses.push_back({static_cast<double>(num_examples_seen), loss});
+
+            time_t tt = std::time(0);
+            struct tm * ptm = std::localtime(&tt);
+            char buf[20];
+            std::strftime(buf, 20, "%Y-%m-%d %H:%M:%S", ptm);
+
+            std::cout << buf << ": Loss after num_examples_seen = " << num_examples_seen << " epoch = " << epoch << ": " << loss << std::endl;
+            if(losses.size() > 1 && losses[losses.size() - 1][1] > losses[losses.size() - 2][1])
+            {
+                learning_rate *= 0.5;
+                std::cout << "Setting learning rate to " << learning_rate << std::endl;
+            }
+        }
+
+        for(unsigned int i = 0; i < y.size(); i++)
+        {
+            sgd_step(x[i], y[i], learning_rate);
+            num_examples_seen++;
+        }
+    }
+}
+
